@@ -38,6 +38,16 @@ tf.compat.v1.flags.DEFINE_string('output_dir',
                                  './VOCdevkit/VOC2012/SegmentationClassRaw',
                                  'folder to save modified ground truth annotations.')
 
+# remap classes to smaller subset
+def mymap(a):
+  if a == 255:
+    return 255
+  if a == 0:
+    return 0
+  if a == 15:
+    return 2
+  return 1
+
 
 def _remove_colormap(filename):
   """Removes the color map from the annotation.
@@ -48,7 +58,9 @@ def _remove_colormap(filename):
   Returns:
     Annotation without color map.
   """
-  return np.array(Image.open(filename))
+  tmp = np.array(Image.open(filename))
+  vfunc = np.vectorize(mymap)
+  return vfunc(tmp)
 
 
 def _save_annotation(annotation, filename):

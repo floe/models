@@ -90,6 +90,17 @@ _PASCAL_VOC_SEG_INFORMATION = DatasetDescriptor(
     ignore_label=255,
 )
 
+_PERSONSEG_INFORMATION = DatasetDescriptor(
+    splits_to_sizes={
+        'train': 1464,
+        'trainaug': 10582,
+        'trainval': 2913,
+        'val': 1449,
+    },
+    num_classes=4,
+    ignore_label=255,
+)
+
 _ADE20K_INFORMATION = DatasetDescriptor(
     splits_to_sizes={
         'train': 20210,  # num of samples in images/training
@@ -102,6 +113,7 @@ _ADE20K_INFORMATION = DatasetDescriptor(
 _DATASETS_INFORMATION = {
     'cityscapes': _CITYSCAPES_INFORMATION,
     'pascal_voc_seg': _PASCAL_VOC_SEG_INFORMATION,
+    'personseg': _PERSONSEG_INFORMATION,
     'ade20k': _ADE20K_INFORMATION,
 }
 
