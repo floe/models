@@ -9,10 +9,10 @@ OUTPUT=datasets/pascal_voc_seg/exp/train_on_trainaug_twoclass/
 DATASET=datasets/pascal_voc_seg/tfrecord/
 
 # Train
-false && (
+echo $@ | grep -q train && (
 python train.py \
     --logtostderr \
-    --training_number_of_steps=10000 \
+    --training_number_of_steps=50000 \
     --train_split="trainaug" \
     --model_variant="mobilenet_v2" \
     --output_stride=16 \
@@ -25,11 +25,11 @@ python train.py \
     --initalize_last_layer=False \
     --last_layers_contain_logits_only=True
 )
-
 # see https://github.com/tensorflow/models/issues/3730#issuecomment-380168917
 
 # Evaluate
-python eval.py \
+echo $@ | grep -q eval && (
+ppython eval.py \
   --logtostderr \
   --eval_split="val" \
   --model_variant="mobilenet_v2" \
@@ -39,9 +39,10 @@ python eval.py \
   --dataset="personseg" \
   --dataset_dir="${DATASET}" \
   --max_number_of_evaluations=1
+)
 
 # Visualize the results.
-false && (
+echo $@ | grep -q vis && (
 python vis.py \
   --logtostderr \
   --vis_split="val" \
