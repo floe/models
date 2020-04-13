@@ -12,7 +12,7 @@ DATASET=datasets/pascal_voc_seg/tfrecord/
 echo $@ | grep -q train && (
 python train.py \
     --logtostderr \
-    --training_number_of_steps=50000 \
+    --training_number_of_steps=100000 \
     --train_split="trainaug" \
     --model_variant="mobilenet_v2" \
     --output_stride=16 \
@@ -22,14 +22,14 @@ python train.py \
     --tf_initial_checkpoint="${MODEL}" \
     --train_logdir="${OUTPUT}/train/" \
     --dataset_dir="${DATASET}" \
-    --initalize_last_layer=False \
-    --last_layers_contain_logits_only=True
+    --noinitalize_last_layer \
+    --last_layers_contain_logits_only
 )
 # see https://github.com/tensorflow/models/issues/3730#issuecomment-380168917
 
 # Evaluate
 echo $@ | grep -q eval && (
-ppython eval.py \
+python eval.py \
   --logtostderr \
   --eval_split="val" \
   --model_variant="mobilenet_v2" \

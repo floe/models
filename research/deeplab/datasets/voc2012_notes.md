@@ -6,3 +6,5 @@ SegmentationClass/ #2913
 	#1449 ImageSets/Segmentation/val.txt (subset2)
 SegmentationClassAug/ #12031 (subset1u2u3)
 	#10582 ImageSets/Segmentation/trainaug.txt (subset1u3)
+
+mIOU for "person" with original data: ~0.8357

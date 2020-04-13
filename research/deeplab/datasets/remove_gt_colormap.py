@@ -33,6 +33,7 @@ tf.compat.v1.flags.DEFINE_string('original_gt_folder',
                                  'Original ground truth annotations.')
 
 tf.compat.v1.flags.DEFINE_string('segmentation_format', 'png', 'Segmentation format.')
+tf.compat.v1.flags.DEFINE_boolean('remap', False, 'Remap classes.')
 
 tf.compat.v1.flags.DEFINE_string('output_dir',
                                  './VOCdevkit/VOC2012/SegmentationClassRaw',
@@ -49,7 +50,7 @@ def mymap(a):
   return 1
 
 
-def _remove_colormap(filename):
+def _remove_colormap(filename,remap=False):
   """Removes the color map from the annotation.
 
   Args:
@@ -59,6 +60,8 @@ def _remove_colormap(filename):
     Annotation without color map.
   """
   tmp = np.array(Image.open(filename))
+  if not remap:
+    return tmp
   vfunc = np.vectorize(mymap)
   return vfunc(tmp)
 
@@ -83,7 +86,7 @@ def main(unused_argv):
   annotations = glob.glob(os.path.join(FLAGS.original_gt_folder,
                                        '*.' + FLAGS.segmentation_format))
   for annotation in annotations:
-    raw_annotation = _remove_colormap(annotation)
+    raw_annotation = _remove_colormap(annotation,FLAGS.remap)
     filename = os.path.basename(annotation)[:-4]
     _save_annotation(raw_annotation,
                      os.path.join(
