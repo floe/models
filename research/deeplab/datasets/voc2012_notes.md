@@ -7,4 +7,6 @@ SegmentationClass/ #2913
 SegmentationClassAug/ #12031 (subset1u2u3)
 	#10582 ImageSets/Segmentation/trainaug.txt (subset1u3)
 
-mIOU for "person" with original data: ~0.8357
+mIOU for "person" with original data (trainval set):
+  ~0.8357 basically without training
+  ~0.8856 after 100 000 epochs

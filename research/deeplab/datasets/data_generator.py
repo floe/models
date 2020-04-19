@@ -94,6 +94,7 @@ _PERSONSEG_INFORMATION = DatasetDescriptor(
     splits_to_sizes={
         'train': 1464,
         'trainaug': 10582,
+        'trainaugval': 12031,
         'trainval': 2913,
         'val': 1449,
     },
