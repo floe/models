@@ -259,7 +259,6 @@ class RuntimeConfig(Config):
     distribution_strategy: e.g. 'mirrored', 'tpu', etc.
     enable_xla: Whether or not to enable XLA.
     per_gpu_thread_count: thread count per GPU.
-    gpu_threads_enabled: Whether or not GPU threads are enabled.
     gpu_thread_mode: Whether and how the GPU device uses its own threadpool.
     dataset_num_private_threads: Number of threads for a private threadpool
       created for all datasets computation.
@@ -274,11 +273,12 @@ class RuntimeConfig(Config):
     loss_scale: The type of loss scale. This is used when setting the mixed
       precision policy.
     run_eagerly: Whether or not to run the experiment eagerly.
+    batchnorm_spatial_persistent: Whether or not to enable the spatial
+      persistent mode for CuDNN batch norm kernel for improved GPU performance.
 
   """
   distribution_strategy: str = 'mirrored'
   enable_xla: bool = False
-  gpu_threads_enabled: bool = False
   gpu_thread_mode: Optional[str] = None
   dataset_num_private_threads: Optional[int] = None
   per_gpu_thread_count: int = 0
@@ -290,6 +290,7 @@ class RuntimeConfig(Config):
   num_packs: int = 1
   loss_scale: Optional[str] = None
   run_eagerly: bool = False
+  batchnorm_spatial_persistent: bool = False
 
 
 @dataclasses.dataclass

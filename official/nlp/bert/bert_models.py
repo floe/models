@@ -54,29 +54,41 @@ class BertPretrainLossAndMetricLayer(tf.keras.layers.Layer):
 
     self.add_metric(lm_example_loss, name='lm_example_loss', aggregation='mean')
 
-    next_sentence_accuracy = tf.keras.metrics.sparse_categorical_accuracy(
-        sentence_labels, sentence_output)
-    self.add_metric(
-        next_sentence_accuracy,
-        name='next_sentence_accuracy',
-        aggregation='mean')
+    if sentence_labels is not None:
+      next_sentence_accuracy = tf.keras.metrics.sparse_categorical_accuracy(
+          sentence_labels, sentence_output)
+      self.add_metric(
+          next_sentence_accuracy,
+          name='next_sentence_accuracy',
+          aggregation='mean')
 
-    self.add_metric(
-        next_sentence_loss, name='next_sentence_loss', aggregation='mean')
+    if next_sentence_loss is not None:
+      self.add_metric(
+          next_sentence_loss, name='next_sentence_loss', aggregation='mean')
 
-  def call(self, lm_output, sentence_output, lm_label_ids, lm_label_weights,
-           sentence_labels):
+  def call(self,
+           lm_output,
+           sentence_output,
+           lm_label_ids,
+           lm_label_weights,
+           sentence_labels=None):
     """Implements call() for the layer."""
     lm_label_weights = tf.cast(lm_label_weights, tf.float32)
     lm_output = tf.cast(lm_output, tf.float32)
-    sentence_output = tf.cast(sentence_output, tf.float32)
 
     mask_label_loss = losses.weighted_sparse_categorical_crossentropy_loss(
         labels=lm_label_ids, predictions=lm_output, weights=lm_label_weights)
-    sentence_loss = losses.weighted_sparse_categorical_crossentropy_loss(
-        labels=sentence_labels, predictions=sentence_output)
-    loss = mask_label_loss + sentence_loss
-    batch_shape = tf.slice(tf.shape(sentence_labels), [0], [1])
+
+    if sentence_labels is not None:
+      sentence_output = tf.cast(sentence_output, tf.float32)
+      sentence_loss = losses.weighted_sparse_categorical_crossentropy_loss(
+          labels=sentence_labels, predictions=sentence_output)
+      loss = mask_label_loss + sentence_loss
+    else:
+      sentence_loss = None
+      loss = mask_label_loss
+
+    batch_shape = tf.slice(tf.shape(lm_label_ids), [0], [1])
     # TODO(hongkuny): Avoids the hack and switches add_loss.
     final_loss = tf.fill(batch_shape, loss)
 
@@ -89,7 +101,8 @@ class BertPretrainLossAndMetricLayer(tf.keras.layers.Layer):
 @gin.configurable
 def get_transformer_encoder(bert_config,
                             sequence_length,
-                            transformer_encoder_cls=None):
+                            transformer_encoder_cls=None,
+                            output_range=None):
   """Gets a 'TransformerEncoder' object.
 
   Args:
@@ -97,6 +110,8 @@ def get_transformer_encoder(bert_config,
     sequence_length: Maximum sequence length of the training data.
     transformer_encoder_cls: A EncoderScaffold class. If it is None, uses the
       default BERT encoder implementation.
+    output_range: the sequence output range, [0, output_range). Default setting
+      is to return the entire sequence output.
 
   Returns:
     A networks.TransformerEncoder object.
@@ -149,13 +164,15 @@ def get_transformer_encoder(bert_config,
     return networks.AlbertTransformerEncoder(**kwargs)
   else:
     assert isinstance(bert_config, configs.BertConfig)
+    kwargs['output_range'] = output_range
     return networks.TransformerEncoder(**kwargs)
 
 
 def pretrain_model(bert_config,
                    seq_length,
                    max_predictions_per_seq,
-                   initializer=None):
+                   initializer=None,
+                   use_next_sentence_label=True):
   """Returns model to be used for pre-training.
 
   Args:
@@ -164,6 +181,7 @@ def pretrain_model(bert_config,
       max_predictions_per_seq: Maximum number of tokens in sequence to mask out
         and use for pretraining.
       initializer: Initializer for weights in BertPretrainer.
+      use_next_sentence_label: Whether to use the next sentence label.
 
   Returns:
       Pretraining model as well as core BERT submodel from which to save
@@ -185,8 +203,12 @@ def pretrain_model(bert_config,
       shape=(max_predictions_per_seq,),
       name='masked_lm_weights',
       dtype=tf.int32)
-  next_sentence_labels = tf.keras.layers.Input(
-      shape=(1,), name='next_sentence_labels', dtype=tf.int32)
+
+  if use_next_sentence_label:
+    next_sentence_labels = tf.keras.layers.Input(
+        shape=(1,), name='next_sentence_labels', dtype=tf.int32)
+  else:
+    next_sentence_labels = None
 
   transformer_encoder = get_transformer_encoder(bert_config, seq_length)
   if initializer is None:
@@ -194,6 +216,7 @@ def pretrain_model(bert_config,
         stddev=bert_config.initializer_range)
   pretrainer_model = models.BertPretrainer(
       network=transformer_encoder,
+      embedding_table=transformer_encoder.get_embedding_table(),
       num_classes=2,  # The next sentence prediction label has two classes.
       num_token_predictions=max_predictions_per_seq,
       initializer=initializer,
@@ -206,17 +229,18 @@ def pretrain_model(bert_config,
       vocab_size=bert_config.vocab_size)
   output_loss = pretrain_loss_layer(lm_output, sentence_output, masked_lm_ids,
                                     masked_lm_weights, next_sentence_labels)
-  keras_model = tf.keras.Model(
-      inputs={
-          'input_word_ids': input_word_ids,
-          'input_mask': input_mask,
-          'input_type_ids': input_type_ids,
-          'masked_lm_positions': masked_lm_positions,
-          'masked_lm_ids': masked_lm_ids,
-          'masked_lm_weights': masked_lm_weights,
-          'next_sentence_labels': next_sentence_labels,
-      },
-      outputs=output_loss)
+  inputs = {
+      'input_word_ids': input_word_ids,
+      'input_mask': input_mask,
+      'input_type_ids': input_type_ids,
+      'masked_lm_positions': masked_lm_positions,
+      'masked_lm_ids': masked_lm_ids,
+      'masked_lm_weights': masked_lm_weights,
+  }
+  if use_next_sentence_label:
+    inputs['next_sentence_labels'] = next_sentence_labels
+
+  keras_model = tf.keras.Model(inputs=inputs, outputs=output_loss)
   return keras_model, transformer_encoder
 
 
@@ -300,7 +324,8 @@ def classifier_model(bert_config,
         stddev=bert_config.initializer_range)
 
   if not hub_module_url:
-    bert_encoder = get_transformer_encoder(bert_config, max_seq_length)
+    bert_encoder = get_transformer_encoder(
+        bert_config, max_seq_length, output_range=1)
     return models.BertClassifier(
         bert_encoder,
         num_classes=num_labels,
@@ -313,8 +338,7 @@ def classifier_model(bert_config,
       shape=(max_seq_length,), dtype=tf.int32, name='input_mask')
   input_type_ids = tf.keras.layers.Input(
       shape=(max_seq_length,), dtype=tf.int32, name='input_type_ids')
-  bert_model = hub.KerasLayer(
-      hub_module_url, trainable=hub_module_trainable)
+  bert_model = hub.KerasLayer(hub_module_url, trainable=hub_module_trainable)
   pooled_output, _ = bert_model([input_word_ids, input_mask, input_type_ids])
   output = tf.keras.layers.Dropout(rate=bert_config.hidden_dropout_prob)(
       pooled_output)

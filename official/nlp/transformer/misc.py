@@ -96,7 +96,7 @@ def define_transformer_flags():
       name='train_steps', short_name='ts', default=300000,
       help=flags_core.help_wrap('The number of steps used to train.'))
   flags.DEFINE_integer(
-      name='steps_between_evals', short_name='sbe', default=1000,
+      name='steps_between_evals', short_name='sbe', default=5000,
       help=flags_core.help_wrap(
           'The Number of training steps to run between evaluations. This is '
           'used if --train_steps is defined.'))
@@ -109,6 +109,10 @@ def define_transformer_flags():
   flags.DEFINE_boolean(
       name='enable_metrics_in_training', default=False,
       help='Whether to enable metrics during training.')
+  flags.DEFINE_boolean(
+      name='enable_mlir_bridge',
+      default=False,
+      help='Whether to enable the TF to XLA bridge.')
   flags.DEFINE_string(
       name='profile_steps', default=None,
       help='Save profiling data to model dir at given range of steps. The '
@@ -261,18 +265,15 @@ def get_callbacks(steps_per_epoch):
   return callbacks
 
 
-def build_stats(history, callbacks):
-  """Normalizes and returns dictionary of stats.
+def update_stats(history, stats, callbacks):
+  """Normalizes and updates dictionary of stats.
 
   Args:
     history: Results of the training step.
+    stats: Dict with pre-existing training stats.
     callbacks: a list of callbacks which might include a time history callback
       used during keras.fit.
-
-  Returns:
-    Dictionary of normalized results.
   """
-  stats = {}
 
   if history and history.history:
     train_hist = history.history
@@ -280,7 +281,7 @@ def build_stats(history, callbacks):
     stats['loss'] = float(train_hist['loss'][-1])
 
   if not callbacks:
-    return stats
+    return
 
   # Look for the time history callback which was used during keras.fit
   for callback in callbacks:
@@ -293,4 +294,3 @@ def build_stats(history, callbacks):
             callback.batch_size * callback.log_steps *
             (len(callback.timestamp_log)-1) /
             (timestamp_log[-1].timestamp - timestamp_log[0].timestamp))
-  return stats

@@ -41,7 +41,9 @@ def single_file_dataset(input_file, name_to_features):
   # For training, we want a lot of parallel reading and shuffling.
   # For eval, we want no shuffling and parallel reading doesn't matter.
   d = tf.data.TFRecordDataset(input_file)
-  d = d.map(lambda record: decode_record(record, name_to_features))
+  d = d.map(
+      lambda record: decode_record(record, name_to_features),
+      num_parallel_calls=tf.data.experimental.AUTOTUNE)
 
   # When `input_file` is a path to a single file or a list
   # containing a single path, disable auto sharding so that
@@ -59,7 +61,9 @@ def create_pretrain_dataset(input_patterns,
                             max_predictions_per_seq,
                             batch_size,
                             is_training=True,
-                            input_pipeline_context=None):
+                            input_pipeline_context=None,
+                            use_next_sentence_label=True,
+                            use_position_id=False):
   """Creates input dataset from (tf)records files for pretraining."""
   name_to_features = {
       'input_ids':
@@ -74,10 +78,13 @@ def create_pretrain_dataset(input_patterns,
           tf.io.FixedLenFeature([max_predictions_per_seq], tf.int64),
       'masked_lm_weights':
           tf.io.FixedLenFeature([max_predictions_per_seq], tf.float32),
-      'next_sentence_labels':
-          tf.io.FixedLenFeature([1], tf.int64),
   }
-
+  if use_next_sentence_label:
+    name_to_features['next_sentence_labels'] = tf.io.FixedLenFeature([1],
+                                                                     tf.int64)
+  if use_position_id:
+    name_to_features['position_ids'] = tf.io.FixedLenFeature([seq_length],
+                                                             tf.int64)
   for input_pattern in input_patterns:
     if not tf.io.gfile.glob(input_pattern):
       raise ValueError('%s does not match any files.' % input_pattern)
@@ -102,8 +109,12 @@ def create_pretrain_dataset(input_patterns,
   # parallel. You may want to increase this number if you have a large number of
   # CPU cores.
   dataset = dataset.interleave(
-      tf.data.TFRecordDataset, cycle_length=8,
+      tf.data.TFRecordDataset,
+      cycle_length=8,
       num_parallel_calls=tf.data.experimental.AUTOTUNE)
+
+  if is_training:
+    dataset = dataset.shuffle(100)
 
   decode_fn = lambda record: decode_record(record, name_to_features)
   dataset = dataset.map(
@@ -118,8 +129,11 @@ def create_pretrain_dataset(input_patterns,
         'masked_lm_positions': record['masked_lm_positions'],
         'masked_lm_ids': record['masked_lm_ids'],
         'masked_lm_weights': record['masked_lm_weights'],
-        'next_sentence_labels': record['next_sentence_labels'],
     }
+    if use_next_sentence_label:
+      x['next_sentence_labels'] = record['next_sentence_labels']
+    if use_position_id:
+      x['position_ids'] = record['position_ids']
 
     y = record['masked_lm_weights']
 
@@ -128,12 +142,8 @@ def create_pretrain_dataset(input_patterns,
   dataset = dataset.map(
       _select_data_from_record,
       num_parallel_calls=tf.data.experimental.AUTOTUNE)
-
-  if is_training:
-    dataset = dataset.shuffle(100)
-
   dataset = dataset.batch(batch_size, drop_remainder=is_training)
-  dataset = dataset.prefetch(1024)
+  dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
   return dataset
 
 
@@ -148,7 +158,6 @@ def create_classifier_dataset(file_path,
       'input_mask': tf.io.FixedLenFeature([seq_length], tf.int64),
       'segment_ids': tf.io.FixedLenFeature([seq_length], tf.int64),
       'label_ids': tf.io.FixedLenFeature([], tf.int64),
-      'is_real_example': tf.io.FixedLenFeature([], tf.int64),
   }
   dataset = single_file_dataset(file_path, name_to_features)
 
@@ -167,14 +176,15 @@ def create_classifier_dataset(file_path,
     y = record['label_ids']
     return (x, y)
 
-  dataset = dataset.map(_select_data_from_record)
-
   if is_training:
     dataset = dataset.shuffle(100)
     dataset = dataset.repeat()
 
+  dataset = dataset.map(
+      _select_data_from_record,
+      num_parallel_calls=tf.data.experimental.AUTOTUNE)
   dataset = dataset.batch(batch_size, drop_remainder=is_training)
-  dataset = dataset.prefetch(1024)
+  dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
   return dataset
 
 
@@ -217,12 +227,13 @@ def create_squad_dataset(file_path,
         x[name] = tensor
     return (x, y)
 
-  dataset = dataset.map(_select_data_from_record)
-
   if is_training:
     dataset = dataset.shuffle(100)
     dataset = dataset.repeat()
 
+  dataset = dataset.map(
+      _select_data_from_record,
+      num_parallel_calls=tf.data.experimental.AUTOTUNE)
   dataset = dataset.batch(batch_size, drop_remainder=True)
-  dataset = dataset.prefetch(1024)
+  dataset = dataset.prefetch(tf.data.experimental.AUTOTUNE)
   return dataset

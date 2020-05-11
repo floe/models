@@ -17,15 +17,8 @@
 from absl import flags
 import tensorflow as tf
 
+from official.utils import hyperparams_flags
 from official.utils.flags import core as flags_core
-
-
-def define_gin_flags():
-  """Define common gin configurable flags."""
-  flags.DEFINE_multi_string('gin_file', None,
-                            'List of paths to the config files.')
-  flags.DEFINE_multi_string(
-      'gin_param', None, 'Newline separated list of Gin parameter bindings.')
 
 
 def define_common_bert_flags():
@@ -39,7 +32,6 @@ def define_common_bert_flags():
       stop_threshold=False,
       batch_size=False,
       num_gpu=True,
-      hooks=False,
       export_dir=False,
       distribution_strategy=True,
       run_eagerly=True)
@@ -100,6 +92,9 @@ def define_common_bert_flags():
       enable_xla=True,
       fp16_implementation=True,
   )
+
+  # Adds gin configuration flags.
+  hyperparams_flags.define_gin_flags()
 
 
 def dtype():

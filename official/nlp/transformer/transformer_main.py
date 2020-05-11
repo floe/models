@@ -39,7 +39,6 @@ from official.nlp.transformer import transformer
 from official.nlp.transformer import translate
 from official.nlp.transformer.utils import tokenizer
 from official.utils.flags import core as flags_core
-from official.utils.logs import logger
 from official.utils.misc import distribution_utils
 from official.utils.misc import keras_utils
 
@@ -149,7 +148,7 @@ class TransformerTask(object):
     params["decode_batch_size"] = flags_obj.decode_batch_size
     params["decode_max_length"] = flags_obj.decode_max_length
     params["padded_decode"] = flags_obj.padded_decode
-    params["num_parallel_calls"] = (
+    params["max_io_parallelism"] = (
         flags_obj.num_parallel_calls or tf.data.experimental.AUTOTUNE)
 
     params["use_synthetic_data"] = flags_obj.use_synthetic_data
@@ -240,7 +239,7 @@ class TransformerTask(object):
       train_ds = data_pipeline.train_input_fn(params)
       map_data_fn = data_pipeline.map_data_for_transformer_fn
       train_ds = train_ds.map(
-          map_data_fn, num_parallel_calls=params["num_parallel_calls"])
+          map_data_fn, num_parallel_calls=tf.data.experimental.AUTOTUNE)
     if params["use_ctl"]:
       train_ds_iterator = iter(train_ds)
 
@@ -363,7 +362,8 @@ class TransformerTask(object):
 
     stats = ({
         "loss": train_loss
-    } if history is None else misc.build_stats(history, callbacks))
+    } if history is None else {})
+    misc.update_stats(history, stats, callbacks)
     if uncased_score and cased_score:
       stats["bleu_uncased"] = uncased_score
       stats["bleu_cased"] = cased_score
@@ -470,25 +470,26 @@ def _ensure_dir(log_dir):
 
 def main(_):
   flags_obj = flags.FLAGS
-  with logger.benchmark_context(flags_obj):
-    task = TransformerTask(flags_obj)
+  if flags_obj.enable_mlir_bridge:
+    tf.config.experimental.enable_mlir_bridge()
+  task = TransformerTask(flags_obj)
 
-    # Execute flag override logic for better model performance
-    if flags_obj.tf_gpu_thread_mode:
-      keras_utils.set_gpu_thread_mode_and_count(
-          per_gpu_thread_count=flags_obj.per_gpu_thread_count,
-          gpu_thread_mode=flags_obj.tf_gpu_thread_mode,
-          num_gpus=flags_obj.num_gpus,
-          datasets_num_private_threads=flags_obj.datasets_num_private_threads)
+  # Execute flag override logic for better model performance
+  if flags_obj.tf_gpu_thread_mode:
+    keras_utils.set_gpu_thread_mode_and_count(
+        per_gpu_thread_count=flags_obj.per_gpu_thread_count,
+        gpu_thread_mode=flags_obj.tf_gpu_thread_mode,
+        num_gpus=flags_obj.num_gpus,
+        datasets_num_private_threads=flags_obj.datasets_num_private_threads)
 
-    if flags_obj.mode == "train":
-      task.train()
-    elif flags_obj.mode == "predict":
-      task.predict()
-    elif flags_obj.mode == "eval":
-      task.eval()
-    else:
-      raise ValueError("Invalid mode {}".format(flags_obj.mode))
+  if flags_obj.mode == "train":
+    task.train()
+  elif flags_obj.mode == "predict":
+    task.predict()
+  elif flags_obj.mode == "eval":
+    task.eval()
+  else:
+    raise ValueError("Invalid mode {}".format(flags_obj.mode))
 
 
 if __name__ == "__main__":
