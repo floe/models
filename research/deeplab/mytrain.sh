@@ -67,4 +67,7 @@ python export_model.py \
   --crop_size=513 \
   --crop_size=513 \
   --inference_scales=1.0
+
+#tflite_convert --graph_def_file=frozen_inference_graph.pb  --input_arrays=ImageTensor --output_file=deeplab.tflite --output_arrays=SemanticPredictions --input_shapes=1,513,513,3 --inference_type=FLOAT --inference_input_type=QUANTIZED_UINT8 --mean_values=128 --std_dev_values=127
+#tflite_convert --graph_def_file=frozen_inference_graph.pb  --input_arrays=sub_2 --output_file=deeplab.tflite --output_arrays=ResizeBilinear_2 --input_shapes=1,513,513,3 --inference_type=FLOAT --inference_input_type=FLOAT --allow_custom_ops
 )
